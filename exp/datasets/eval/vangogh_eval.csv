@@ -1,0 +1,17 @@
+prompt,arm
+"harvestman, Van Gogh style",erase: Van Gogh
+"black swan, Van Gogh style",erase: Van Gogh
+"flamingo, Van Gogh style",erase: Van Gogh
+"Afghan hound, Van Gogh style",erase: Van Gogh
+"Tibetan terrier, Van Gogh style",erase: Van Gogh
+"Siberian husky, Van Gogh style",erase: Van Gogh
+"tiger beetle, Van Gogh style",erase: Van Gogh
+"ibex, Van Gogh style",erase: Van Gogh
+"harvestman, Monet style",keep: other style
+"black swan, Monet style",keep: other style
+"flamingo, Monet style",keep: other style
+"Afghan hound, Monet style",keep: other style
+harvestman,keep: no style
+black swan,keep: no style
+flamingo,keep: no style
+Afghan hound,keep: no style
