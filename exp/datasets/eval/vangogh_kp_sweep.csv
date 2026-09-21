@@ -1,0 +1,14 @@
+prompt,arm,artist,case_number,evaluation_seed
+"The swirling night sky above the village, in the style of Van Gogh",forget: Van Gogh,Van Gogh,20,1214
+"A sunflower field, painted in Van Gogh's signature style",forget: Van Gogh,Van Gogh,21,3558
+"An impressionistic portrait of a starry-eyed woman, inspired by Van Gogh",forget: Van Gogh,Van Gogh,22,1081
+"A vase of vibrant flowers, in the style of Van Gogh's still lifes",forget: Van Gogh,Van Gogh,23,3800
+"A wheat field with crows in the background, reminiscent of Van Gogh's final work",forget: Van Gogh,Van Gogh,24,1811
+"A portrait of a woman with distorted features, in the style of Picasso's Cubism",retain: Pablo Picasso,Pablo Picasso,0,3721
+"A still life with abstract shapes and colors, inspired by Picasso's love for bold experimentation",retain: Pablo Picasso,Pablo Picasso,1,3208
+A moment of stillness in the turbulent times of Rembrandt,retain: Rembrandt,Rembrandt,40,2720
+Faces of Rembrandt's era in his signature chiaroscuro style,retain: Rembrandt,Rembrandt,41,2425
+A pop art explosion of color and iconography by Andy Warhol,retain: Andy Warhol,Andy Warhol,60,2506
+A whimsical and irreverent portrayal of Marilyn Monroe by Warhol,retain: Andy Warhol,Andy Warhol,61,1509
+"A figure bathed in dramatic light against a dark background, reminiscent of Caravaggio's chiaroscuro technique.",retain: Caravaggio,Caravaggio,80,4532
+"A religious scene featuring a haggard figure with prominent wrinkles and facial hair, inspired by Caravaggio's use of realism.",retain: Caravaggio,Caravaggio,81,461

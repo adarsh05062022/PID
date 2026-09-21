@@ -118,7 +118,14 @@ def main(args):
     f_prompt = _font(13)
     f_idx = _font(13, bold=True)
 
-    width = prompt_w + len(runs) * (thumb + PAD) + PAD
+    gap_after = {int(i) for i in args.gap_after.split(',') if i.strip()} if args.gap_after else set()
+    col_x = []
+    x = prompt_w
+    for col in range(len(runs)):
+        col_x.append(x)
+        x += thumb + PAD + (args.gap if col in gap_after else 0)
+
+    width = x + PAD
     height = HEADER_H + len(names) * (thumb + PAD) + PAD
     canvas = Image.new('RGB', (width, height), BG)
     draw = ImageDraw.Draw(canvas)
@@ -126,7 +133,7 @@ def main(args):
     draw.rectangle([0, 0, width, HEADER_H], fill=HEADER_BG)
     _centered(draw, 'prompt', f_head, 0, prompt_w, (HEADER_H - 17) // 2, HEADER_FG)
     for col, (label, _) in enumerate(runs):
-        _header(draw, label, prompt_w + col * (thumb + PAD), thumb, HEADER_FG)
+        _header(draw, label, col_x[col], thumb, HEADER_FG)
 
     # Wrap width in characters, from the average glyph width of the font.
     char_w = max(1, _text_w(draw, 'n' * 20, f_prompt) // 20)
@@ -140,7 +147,7 @@ def main(args):
         draw.text((PAD + 6, y0 + 26), text, font=f_prompt, fill=PROMPT_FG)
 
         for col, (_, path) in enumerate(runs):
-            x0 = prompt_w + col * (thumb + PAD)
+            x0 = col_x[col]
             src = cell_image(path, name)
             if src is None:
                 draw.rectangle([x0, y0, x0 + thumb, y0 + thumb], fill=MISSING_BG)
@@ -161,4 +168,8 @@ if __name__ == '__main__':
     p.add_argument('--n', type=int, default=0, help='0 = all prompts')
     p.add_argument('--thumb', type=int, default=256)
     p.add_argument('--prompt_width', type=int, default=300)
+    p.add_argument('--gap_after', default='',
+                   help='comma-separated 0-based column indices after which to insert an extra gap, '
+                        'e.g. "0,2,4,6" to separate a baseline column and then pairs')
+    p.add_argument('--gap', type=int, default=18, help='extra gap width in px')
     main(p.parse_args())
