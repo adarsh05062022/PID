@@ -40,22 +40,34 @@ EXTENSIONS = {
 
 
 def load_prompts(args):
-    """Load evaluation prompts: a custom CSV, ImageNet templates, or COCO captions."""
+    """Load evaluation prompts: a custom CSV, ImageNet templates, or COCO captions.
+
+    Returns (prompts, num_images_per_prompt, seeds); seeds is a per-prompt
+    list only for --prompts_csv with --seed_column, else None (every prompt
+    then starts at --seed).
+    """
     if args.prompts_csv:
         df = pd.read_csv(args.prompts_csv)
-        prompts = [p for p in df['prompt'] if isinstance(p, str) and p.strip()]
-        return prompts, args.num_images_per_prompt
+        keep = [isinstance(p, str) and bool(p.strip()) for p in df['prompt']]
+        prompts = [p for p, k in zip(df['prompt'], keep) if k]
+        seeds = None
+        if args.seed_column:
+            # Benchmarks such as SAFREE's carry their own per-prompt seed
+            # (evaluation_seed); the row order is kept so <prompt_idx> still
+            # indexes the CSV.
+            seeds = [int(s) for s, k in zip(df[args.seed_column], keep) if k]
+        return prompts, args.num_images_per_prompt, seeds
     if args.generate_concept != 'coco':
         template_path = args.template_path or 'exp/datasets/eval/imagenet/template.json'
         with open(template_path) as f:
             templates = json.load(f)
-        return [t.format(args.generate_concept) for t in templates], args.num_images_per_prompt
+        return [t.format(args.generate_concept) for t in templates], args.num_images_per_prompt, None
     else:
         df = pd.read_csv('exp/datasets/eval/coco/coco_30k.csv')
         prompts = [p for p in df['prompt'] if 'horse' not in p.lower()]
         if args.max_samples:
             prompts = prompts[:args.max_samples]
-        return prompts, 1
+        return prompts, 1, None
 
 
 def hook_model(pipeline: DiffusionPipeline, device: tp.Any, args: argparse.Namespace) -> VectorControl:
@@ -132,9 +144,16 @@ def main(args: argparse.Namespace):
 
     if args.generate_concept is None and args.prompts_csv is None:
         raise ValueError('pass --generate_concept or --prompts_csv')
+    if args.seed_column and not args.prompts_csv:
+        raise ValueError('--seed_column needs --prompts_csv')
 
     pipeline = init_pipeline_for_image_model(model=args.model_name)
     pipeline.set_progress_bar_config(disable=True)
+    if args.scheduler == 'dpm-multistep':
+        # SAFREE's sampler (DPMSolverMultistepScheduler.from_pretrained on the
+        # model's own scheduler config); the model's default is kept otherwise.
+        from diffusers import DPMSolverMultistepScheduler
+        pipeline.scheduler = DPMSolverMultistepScheduler.from_config(pipeline.scheduler.config)
     if args.vae_slicing:
         # Decode the batch one image at a time. Cuts the peak memory of a
         # 10-image SD-1.4 batch from >10 GB to ~4 GB; the images differ from a
@@ -144,7 +163,7 @@ def main(args: argparse.Namespace):
 
     vector_control = hook_model(pipeline, device, args)
 
-    prompts, num_images_per_prompt = load_prompts(args)
+    prompts, num_images_per_prompt, prompt_seeds = load_prompts(args)
     skipped = generated = 0
 
     # --diag only exists on the PID controllers: one CSV per generated batch
@@ -163,14 +182,22 @@ def main(args: argparse.Namespace):
     else:
         setting = f'{args.controller} kp={args.kp} ki={args.ki} kg={args.kg} kd={args.kd}'
     print(f'Generating images for concept {args.generate_concept} with {setting}')
+    shard_start = args.shard_start if args.shard_start is not None else 0
+    shard_end = args.shard_end if args.shard_end is not None else len(prompts)
+    if shard_start or shard_end != len(prompts):
+        print(f'Sharding: only prompt_idx in [{shard_start}, {shard_end}) '
+              f'({shard_end - shard_start} of {len(prompts)} prompts)')
     for prompt_idx, prompt in enumerate(prompts):
+        if prompt_idx < shard_start or prompt_idx >= shard_end:
+            continue
         # --prompts_csv prompts are free text and can exceed the filesystem's
         # ~255-byte filename limit, so they cannot be used as a directory name
         # the way a short template/caption is; fall back to the index instead.
         prompt_dir = str(prompt_idx) if args.prompts_csv else prompt
+        base_seed = prompt_seeds[prompt_idx] if prompt_seeds is not None else args.seed
         num_batches = math.ceil(num_images_per_prompt / args.batch_size)
         for batch_id in range(0, num_batches):
-            seed = args.seed + batch_id
+            seed = base_seed + batch_id
             num_images = min(args.batch_size, num_images_per_prompt - batch_id * args.batch_size)
 
             output_paths = [f'{args.output_dir}/{prompt_dir}/{seed}-{idx}.{EXTENSIONS[args.file_format]}' for idx in range(num_images)]
@@ -185,6 +212,9 @@ def main(args: argparse.Namespace):
                 seed=seed,
                 device=device,
                 num_images=num_images,
+                num_inference_steps=args.num_inference_steps,
+                guidance_scale=args.guidance_scale,
+                image_size=args.image_size,
             )
             if records_dir is not None:
                 # Drain before reset() so this batch's trace does not bleed
@@ -239,9 +269,29 @@ if __name__ == "__main__":
     main_parser.add_argument('--seed', type=int, default=0, help='Starting seed for each prompt')
     main_parser.add_argument('--file_format', type=str, choices=['PNG', 'JPEG'], default='PNG', help='File format for generated images')
     main_parser.add_argument('--max_samples', type=int, default=None, help='Maximum number of samples to use from the dataset')
+    main_parser.add_argument('--shard_start', type=int, default=None,
+                             help='Only generate prompt_idx >= this (global index into --prompts_csv, '
+                                  'before filtering); pairs with --shard_end to split one CSV across '
+                                  'GPUs while keeping directory names/skip-logic globally consistent')
+    main_parser.add_argument('--shard_end', type=int, default=None,
+                             help='Only generate prompt_idx < this (exclusive)')
     main_parser.add_argument('--template_path', type=str, default=None, help='Path to template JSON for evaluation prompts (default: imagenet template)')
     main_parser.add_argument('--vae_slicing', action='store_true',
                              help='Decode the VAE one image at a time (much lower peak memory for batch_size > 1)')
+    # Sampling-protocol overrides. All default to "leave the model's usual
+    # settings alone"; a benchmark that fixes its own sampler (SAFREE's SDXL
+    # rows: --scheduler dpm-multistep --num_inference_steps 50
+    # --guidance_scale 7.5 --image_size 512 --seed_column seed) sets them.
+    main_parser.add_argument('--seed_column', type=str, default=None,
+                             help='Column of --prompts_csv holding a per-prompt seed (overrides --seed)')
+    main_parser.add_argument('--num_inference_steps', type=int, default=None,
+                             help='Denoising steps (default: the per-model count in core.utils)')
+    main_parser.add_argument('--guidance_scale', type=float, default=None,
+                             help="Classifier-free guidance scale (default: the pipeline's own)")
+    main_parser.add_argument('--image_size', type=int, default=None,
+                             help="Square output resolution (default: the pipeline's own)")
+    main_parser.add_argument('--scheduler', choices=['default', 'dpm-multistep'], default='default',
+                             help="'dpm-multistep' swaps in DPMSolverMultistepScheduler on the model's scheduler config")
 
     # Steering params
     main_parser.add_argument('--steering_strength', type=float, default=None, help='Steering strength beta (default for erasure: 2.0)')

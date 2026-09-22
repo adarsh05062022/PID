@@ -159,13 +159,27 @@ def get_num_denoising_steps(model: str) -> int:
         raise ValueError(f'Unknown model type: {model}')
 
 
-def run_image_model(model_type: str, pipe, prompt: str, seed: int, device: torch.device, num_images: int = 1):
+def run_image_model(model_type: str, pipe, prompt: str, seed: int, device: torch.device, num_images: int = 1,
+                    num_inference_steps: int = None, guidance_scale: float = None, image_size: int = None):
+    # The three trailing overrides exist for protocols that fix their own
+    # sampling settings (e.g. SAFREE's SDXL benchmark: 512px, 50 steps,
+    # guidance 7.5). Left at None they change nothing: the step count comes
+    # from get_num_denoising_steps and the pipeline keeps its own defaults.
+    overrides = {}
+    if guidance_scale is not None:
+        overrides['guidance_scale'] = guidance_scale
+    if image_size is not None:
+        overrides.update(height=image_size, width=image_size)
+    if num_inference_steps is None:
+        num_inference_steps = get_num_denoising_steps(model_type)
+
     if model_type in ['sd14', 'sd21', 'sdxl']:
         images = pipe(
             prompt=prompt,
-            num_inference_steps=get_num_denoising_steps(model_type),
+            num_inference_steps=num_inference_steps,
             generator=torch.Generator(device=device).manual_seed(seed),
             num_images_per_prompt=num_images,
+            **overrides,
         ).images
     elif model_type in ['sd21-turbo', 'sdxl-turbo']:
         images = pipe(

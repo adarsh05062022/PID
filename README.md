@@ -256,6 +256,30 @@ python scripts/diffusion/produce_scores.py \
     --num_workers 4 --batch_size 32
 ```
 
+### SAFREE Table 5 protocol (SDXL / SD-v3 nudity attacks + COCO quality)
+Reproduces the SDXL and SD-v3 rows of SAFREE's Table 5 (arXiv:2410.12761): nudity
+attack-success rate on P4D, Ring-A-Bell, MMA-Diffusion and UnlearnDiffAtk, and
+CLIP score on 1k COCO captions, for the plain model and for `--controller adaptive_kg`
+(optionally `casteer`). Sampling settings, seeds, NudeNet thresholds and the CLIP
+model follow SAFREE's own scripts; see the header of the driver for the exact
+protocol and `scripts/diffusion/make_safree_table.py` for the paper's numbers.
+
+```bash
+# 1. Prompt sets -> datasets/safree_bench/*.csv (P4D-N is gated on HuggingFace:
+#    put p4dn_16_prompt.csv into datasets/ once joycenerd/p4d grants access)
+python scripts/diffusion/prepare_safree_bench.py
+
+# 2. Generate + score + table (resumable; GPUs are picked dynamically)
+nohup bash scripts/diffusion/run_safree_bench.sh 0,1,4,5,7 > logs/safree_bench/driver.log 2>&1 &
+#    MODELS="sdxl" ARMS="baseline casteer adaptive_kg" BENCHES="ring_a_bell" KI=0.02 ... for subsets/gains
+#    STAGE=score bash scripts/diffusion/run_safree_bench.sh 0     # re-score / rebuild the table only
+
+# Results: results/safree_bench/table.md (+ per-run nudenet_result.json / clip_score_result.json)
+```
+
+TIFA is off by default (`TIFA=1` enables it; needs the `tifa` conda env, see
+`scripts/diffusion/eval_tifa.py`).
+
 ### I2P benchmark (safety evaluation)
 4,703 prompts from the I2P dataset, evaluated with NudeNet and Q16 classifiers.
 

@@ -21,11 +21,11 @@
 # official repo's) default. The optional "casteer-2.0-clip-allsteps" arm uses
 # the per-step vectors instead (Algorithm 2 as written in the paper).
 #
-# Layout:
-#   results/sd14/steering_vectors/snoopy.pt
-#   results/sd14/eval_<concept>/<method>/<prompt>/<seed>-<i>.png
-#   results/sd14/eval_<concept>/{clip_score.tsv,fid.tsv}
-#   results/sd14/table5_object_erasure.{md,tsv}      (make_table5.py)
+# Layout (everything this pipeline produces lives under one grouped folder):
+#   results/sd14/table5_object_erasure/snoopy_steering_vector.pt
+#   results/sd14/table5_object_erasure/eval_<concept>/<method>/<prompt>/<seed>-<i>.png
+#   results/sd14/table5_object_erasure/eval_<concept>/{clip_score.tsv,fid.tsv}
+#   results/sd14/table5_object_erasure/table5_object_erasure.{md,tsv}   (make_table5.py)
 #
 # Usage:
 #   bash scripts/diffusion/run_table5_object_erasure.sh <gpu_ids>        # e.g. 1,2,5,6
@@ -67,13 +67,13 @@ export PYTORCH_CUDA_ALLOC_CONF=${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:Tr
 
 STAGE=${STAGE:-all}                     # all | generate | score
 TEMPLATES=exp/datasets/eval/clip_templates.json
-VECTOR=results/sd14/steering_vectors/snoopy.pt
-OUT=results/sd14
+OUT=results/sd14/table5_object_erasure   # everything this pipeline writes lives under here
+VECTOR=$OUT/snoopy_steering_vector.pt
 LOGS=logs/table5
 BATCH_SIZE=${BATCH_SIZE:-10}            # images per batch; 10 = one batch per prompt
 SEED=${SEED:-0}
 NUM_IMAGES=${NUM_IMAGES:-10}            # per template -> 80 x 10 = 800 per concept
-mkdir -p "$LOGS" "$OUT/steering_vectors"
+mkdir -p "$LOGS" "$OUT"
 
 # Space-separated; override to run a subset.
 read -r -a CONCEPTS <<< "${CONCEPTS:-snoopy mickey spongebob pikachu dog legislator}"
@@ -87,6 +87,7 @@ method_flags() {
         orig)                      echo "" ;;
         casteer-2.0)               echo "--steering_strength 2.0" ;;
         casteer-2.0-clip)          echo "--steering_strength 2.0 --intermediate_clipping" ;;
+        casteer-2.0-allsteps)      echo "--steering_strength 2.0 --use_all_diffusion_steps" ;;
         casteer-2.0-clip-allsteps) echo "--steering_strength 2.0 --intermediate_clipping --use_all_diffusion_steps" ;;
         casteer-*)                 # e.g. casteer-1.5 / casteer-1.5-clip for a beta sweep
             local beta=${1#casteer-}; local clip=""

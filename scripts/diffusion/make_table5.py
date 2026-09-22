@@ -118,7 +118,7 @@ def build_table(results_dir):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--results_dir', default='results/sd14')
+    ap.add_argument('--results_dir', default='results/sd14/table5_object_erasure')
     ap.add_argument('--out_prefix', default=None, help='default: <results_dir>/table5_object_erasure')
     args = ap.parse_args()
     out_prefix = args.out_prefix or os.path.join(args.results_dir, 'table5_object_erasure')

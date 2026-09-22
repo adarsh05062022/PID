@@ -39,13 +39,19 @@ EXTENSIONS = {'PNG': 'png', 'JPEG': 'jpg'}
 
 
 def load_prompts(args):
+    """Returns (prompts, seeds); seeds is per-prompt only with --seed_column, else None."""
     if args.prompts_csv:
         df = pd.read_csv(args.prompts_csv)
-        return [p for p in df['prompt'] if isinstance(p, str) and p.strip()]
+        keep = [isinstance(p, str) and bool(p.strip()) for p in df['prompt']]
+        prompts = [p for p, k in zip(df['prompt'], keep) if k]
+        seeds = None
+        if args.seed_column:
+            seeds = [int(s) for s, k in zip(df[args.seed_column], keep) if k]
+        return prompts, seeds
     template_path = args.template_path or 'exp/datasets/eval/imagenet/template.json'
     with open(template_path) as f:
         templates = json.load(f)
-    return [t.format(args.generate_concept) for t in templates]
+    return [t.format(args.generate_concept) for t in templates], None
 
 
 def hook_model(pipe, args):
@@ -106,11 +112,13 @@ def main(args):
 
     if args.generate_concept is None and args.prompts_csv is None:
         raise ValueError('pass --generate_concept or --prompts_csv')
+    if args.seed_column and not args.prompts_csv:
+        raise ValueError('--seed_column needs --prompts_csv')
 
     pipe = load_sd3(args.device, model_id=args.model_id, drop_t5=args.drop_t5)
     vector_control = hook_model(pipe, args)
 
-    prompts = load_prompts(args)
+    prompts, prompt_seeds = load_prompts(args)
     skipped = generated = 0
 
     records_dir = None
@@ -125,9 +133,10 @@ def main(args):
 
     for prompt_idx, prompt in enumerate(prompts):
         prompt_dir = str(prompt_idx) if args.prompts_csv else prompt
+        base_seed = prompt_seeds[prompt_idx] if prompt_seeds is not None else args.seed
         num_batches = math.ceil(args.num_images_per_prompt / args.batch_size)
         for batch_id in range(num_batches):
-            seed = args.seed + batch_id
+            seed = base_seed + batch_id
             num_images = min(args.batch_size, args.num_images_per_prompt - batch_id * args.batch_size)
 
             output_paths = [f'{args.output_dir}/{prompt_dir}/{seed}-{idx}.{EXTENSIONS[args.file_format]}'
@@ -174,6 +183,8 @@ if __name__ == '__main__':
     m = parser.add_argument_group('Common arguments')
     m.add_argument('--generate_concept', type=str, default=None)
     m.add_argument('--prompts_csv', type=str, default=None, help="CSV with a 'prompt' column")
+    m.add_argument('--seed_column', type=str, default=None,
+                   help='Column of --prompts_csv holding a per-prompt seed (overrides --seed)')
     m.add_argument('--template_path', type=str, default=None)
     m.add_argument('--output_dir', type=str, required=True)
     m.add_argument('--num_images_per_prompt', type=int, default=1)
