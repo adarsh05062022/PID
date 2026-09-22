@@ -4,3 +4,13 @@ logs/
 *.pt.meta.json
 __pycache__/
 *.py[cod]
+
+# Images
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+*.tiff
+*.tif
+*.webp
