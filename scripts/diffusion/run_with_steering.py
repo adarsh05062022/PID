@@ -201,7 +201,10 @@ def main(args: argparse.Namespace):
             num_images = min(args.batch_size, num_images_per_prompt - batch_id * args.batch_size)
 
             output_paths = [f'{args.output_dir}/{prompt_dir}/{seed}-{idx}.{EXTENSIONS[args.file_format]}' for idx in range(num_images)]
-            if all(os.path.exists(path) for path in output_paths):
+            # getsize > 0, not just exists: a process killed mid-save (OOM, a manual
+            # kill for GPU rebalancing, etc.) can leave a 0-byte file that looks
+            # "done" forever otherwise -- seen in practice on 2026-09-22.
+            if all(os.path.exists(path) and os.path.getsize(path) > 0 for path in output_paths):
                 skipped += num_images
                 continue
             generated += num_images
